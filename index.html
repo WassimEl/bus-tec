@@ -31,7 +31,7 @@ button{border:0;border-radius:12px;padding:12px 14px;font-size:16px;font-weight:
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-const RT_URL=''; // plus tard : URL du relais Cloudflare (positions des bus en direct)
+const RT_URL='bus-tec.gg-build.workers.dev'; // plus tard : URL du relais Cloudflare (positions des bus en direct)
 const $=id=>document.getElementById(id),
  hm=s=>{s%=86400;return String(s/3600|0).padStart(2,'0')+':'+String(s%3600/60|0).padStart(2,'0')};
 let D,S,byName={},res=[],tm;
