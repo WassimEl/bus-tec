@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bus TEC">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#101418">
+<title>Bus TEC</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#101418;--card:#1b2128;--tx:#f1f3f5;--mu:#8e98a3;--ac:#f5b400}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--tx);font:16px/1.35 -apple-system,system-ui,sans-serif;display:flex;flex-direction:column}
+#map{flex:1;min-height:0}
+#panel{background:var(--card);border-radius:20px 20px 0 0;padding:14px 14px calc(14px + env(safe-area-inset-bottom));max-height:58%;overflow:auto;margin-top:-18px;position:relative;z-index:500}
+.row{display:flex;gap:8px;align-items:center}
+input{flex:1;width:100%;padding:12px;margin:4px 0;border-radius:12px;border:1px solid #2d3641;background:var(--bg);color:var(--tx);font-size:16px}
+button{border:0;border-radius:12px;padding:12px 14px;font-size:16px;font-weight:600;background:#2d3641;color:var(--tx)}
+#go{width:100%;margin-top:6px;background:var(--ac);color:#111}
+.r{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:var(--bg);margin-top:8px}
+.l{min-width:46px;text-align:center;padding:5px 7px;border-radius:8px;font-weight:700;color:#fff}
+.t{font-size:18px;font-weight:600}.mu{color:var(--mu);font-size:14px}.bus{font-size:22px}
+</style></head><body>
+<div id="map"></div>
+<div id="panel">
+ <div class="row"><input id="a" list="names" placeholder="Départ (arrêt)"><button id="gps" title="Autour de moi">📍</button></div>
+ <div class="row"><input id="b" list="names" placeholder="Arrivée (arrêt)"><button id="sw" title="Inverser">⇅</button></div>
+ <datalist id="names"></datalist>
+ <button id="go">Voir les prochains bus</button>
+ <div id="out"></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const RT_URL=''; // plus tard : URL du relais Cloudflare (positions des bus en direct)
+const $=id=>document.getElementById(id),
+ hm=s=>{s%=86400;return String(s/3600|0).padStart(2,'0')+':'+String(s%3600/60|0).padStart(2,'0')};
+let D,S,byName={},res=[],tm;
+const map=L.map('map',{zoomControl:false}).setView([50.41,4.44],13),
+ layer=L.layerGroup().addTo(map),bus=L.layerGroup().addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
+
+fetch('data.json').then(r=>r.json()).then(d=>{
+ D=d;S=d.stops;S.forEach((s,i)=>(byName[s[1]]??=[]).push(i));
+ $('names').innerHTML=Object.keys(byName).sort().map(n=>`<option value="${n.replace(/"/g,'&quot;')}">`).join('');
+}).catch(()=>$('out').innerHTML='<p class="mu">data.json introuvable : lance prep.py et place le fichier à côté de index.html.</p>');
+
+const active=(v,now)=>{
+ const y=now.getFullYear()*1e4+(now.getMonth()+1)*100+now.getDate();
+ if(v[4].includes(y))return false;if(v[3].includes(y))return true;
+ return y>=v[1]&&y<=v[2]&&v[0][(now.getDay()+6)%7]=='1'};
+
+$('go').onclick=()=>{
+ const F=byName[$('a').value],T=byName[$('b').value];
+ if(!D||!F||!T)return $('out').innerHTML='<p class="mu">Choisis deux arrêts dans la liste proposée.</p>';
+ const now=new Date(),ns=now.getHours()*3600+now.getMinutes()*60;res=[];
+ for(const[pi,sv,st]of D.trips){
+  const[rt,ss,off]=D.pats[pi],i=ss.findIndex(x=>F.includes(x));
+  if(i<0)continue;const dep=st+off[i];
+  if(dep<ns||dep>ns+10800||!active(D.svc[sv],now))continue;
+  const j=ss.findIndex((x,k)=>k>i&&T.includes(x));
+  if(j>0)res.push({rt,dep,arr:st+off[j],i,j,ss});
+ }
+ res.sort((x,y)=>x.dep-y.dep);res=res.slice(0,6);
+ $('out').innerHTML=res.length?res.map((r,k)=>{const R=D.R[r.rt];
+  return `<div class="r" onclick="show(${k})"><span class="l" style="background:${R[1]}">${R[0]}</span>
+  <div><div class="t">${hm(r.dep)} → ${hm(r.arr)}</div><div class="mu">${Math.round((r.arr-r.dep)/60)} min, direct</div></div></div>`}).join('')
+  :'<p class="mu">Aucun bus direct dans les 3 prochaines heures. Les correspondances arrivent dans la version suivante.</p>';
+ if(res.length)show(0);
+};
+
+function show(k){
+ const r=res[k],R=D.R[r.rt];layer.clearLayers();
+ const line=L.polyline(R[2],{color:R[1],weight:5}).addTo(layer);
+ r.ss.slice(r.i,r.j+1).forEach(x=>L.circleMarker([S[x][2],S[x][3]],{radius:5,color:'#fff',fillColor:R[1],fillOpacity:1,weight:2}).bindTooltip(S[x][1]).addTo(layer));
+ map.fitBounds(line.getBounds(),{padding:[30,30]});live(r.rt);
+}
+function live(rt){ // positions en direct, actif dès que RT_URL est renseignée
+ clearInterval(tm);bus.clearLayers();if(!RT_URL)return;
+ const f=()=>fetch(RT_URL+'?route='+rt).then(r=>r.json()).then(v=>{bus.clearLayers();
+  v.forEach(x=>L.marker([x.lat,x.lon],{icon:L.divIcon({html:'🚌',className:'bus'})}).addTo(bus))}).catch(()=>{});
+ f();tm=setInterval(f,15000);
+}
+$('sw').onclick=()=>{const v=$('a').value;$('a').value=$('b').value;$('b').value=v};
+$('gps').onclick=()=>navigator.geolocation.getCurrentPosition(p=>{
+ const{latitude:la,longitude:lo}=p.coords;let b=0,m=1e9;
+ S.forEach((s,i)=>{const d=(s[2]-la)**2+((s[3]-lo)*.64)**2;if(d<m){m=d;b=i}});
+ $('a').value=S[b][1];map.setView([la,lo],15)});
+</script></body></html>
