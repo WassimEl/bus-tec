@@ -4,7 +4,7 @@ import csv, io, json, zipfile, urllib.request
 from collections import defaultdict, Counter
 
 URL = "https://data.gtfs.be/tec/gtfs/be-tec-gtfs.zip"
-LAT, LON = (50.30, 50.52), (4.30, 4.58)  # zone à élargir plus tard
+LAT, LON = (50.36, 50.49), (4.33, 4.56)  # Grand Charleroi (Courcelles, Gosselies, Fleurus, Châtelet, Montigny-le-Tilleul)
 
 z = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(URL).read()))
 rd = lambda n: csv.DictReader(io.TextIOWrapper(z.open(n), 'utf-8-sig'))
